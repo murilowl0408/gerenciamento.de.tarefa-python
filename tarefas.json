@@ -1,0 +1,30 @@
+[
+    {
+        "id": 1,
+        "titulo": "trabalho python",
+        "descricao": "criar código para gerenciamento de tarefas",
+        "vencimento": "11/10/2026",
+        "status": "concluída"
+    },
+    {
+        "id": 2,
+        "titulo": "bater faturamento de 30 mil reais",
+        "descricao": "",
+        "vencimento": "31/12/2026",
+        "status": "em andamento"
+    },
+    {
+        "id": 3,
+        "titulo": "estudar java",
+        "descricao": "testando codigo java",
+        "vencimento": "04/12/2026",
+        "status": "pendente"
+    },
+    {
+        "id": 5,
+        "titulo": "subir ec2 na aws",
+        "descricao": "arrumar as permissoes do ec2 e escolher w server",
+        "vencimento": "15/10/2026",
+        "status": "em andamento"
+    }
+]

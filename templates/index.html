@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minhas tarefas</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<main>
+  <h1>Minhas tarefas</h1>
+  <p class="sub">Cadastre, filtre e acompanhe o que precisa ser feito.</p>
+
+  <section class="painel">
+    <h2>Nova tarefa</h2>
+    <form id="form-nova" class="grade">
+      <div class="cheio"><label for="n-titulo">Título</label><input id="n-titulo" required></div>
+      <div class="cheio"><label for="n-desc">Descrição</label><textarea id="n-desc" rows="2"></textarea></div>
+      <div><label for="n-data">Vencimento</label><input id="n-data" type="date" required></div>
+      <div><label for="n-status">Status</label>
+        <select id="n-status">
+          <option value="pendente">pendente</option>
+          <option value="em andamento">em andamento</option>
+          <option value="concluída">concluída</option>
+        </select>
+      </div>
+      <div class="cheio"><button class="principal" type="submit">Cadastrar tarefa</button></div>
+    </form>
+    <p class="msg" id="msg-nova" role="alert"></p>
+  </section>
+
+  <section class="painel filtros">
+    <div><label for="f-status">Filtrar por status</label>
+      <select id="f-status">
+        <option value="">todos</option>
+        <option value="pendente">pendente</option>
+        <option value="em andamento">em andamento</option>
+        <option value="concluída">concluída</option>
+      </select>
+    </div>
+    <div><label for="f-data">Filtrar por vencimento</label><input id="f-data" type="date"></div>
+    <button id="limpar" type="button">Limpar filtros</button>
+  </section>
+
+  <section id="lista" aria-live="polite"></section>
+</main>
+
+<dialog id="dlg">
+  <form id="form-editar" class="grade">
+    <h2 class="cheio">Editar tarefa</h2>
+    <input type="hidden" id="e-id">
+    <div class="cheio"><label for="e-titulo">Título</label><input id="e-titulo" required></div>
+    <div class="cheio"><label for="e-desc">Descrição</label><textarea id="e-desc" rows="2"></textarea></div>
+    <div class="cheio"><label for="e-data">Vencimento</label><input id="e-data" type="date" required></div>
+    <p class="msg cheio" id="msg-editar" role="alert"></p>
+    <div class="acoes cheio">
+      <button type="button" id="cancelar">Cancelar</button>
+      <button class="principal" type="submit">Salvar alterações</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const STATUS = ["pendente", "em andamento", "concluída"];
+const paraBR = (iso) => (iso ? iso.split("-").reverse().join("/") : "");
+const paraISO = (br) => br.split("/").reverse().join("-");
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+let tarefasAtuais = [];
+
+async function api(url, opcoes = {}) {
+  const r = await fetch(url, { headers: { "Content-Type": "application/json" }, ...opcoes });
+  const dados = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(dados.erro || "Algo deu errado.");
+  return dados;
+}
+
+function atrasada(t) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  return t.status !== "concluída" && paraISO(t.vencimento) < hoje;
+}
+
+function desenhar(lista) {
+  const area = $("#lista");
+  if (!lista.length) {
+    area.innerHTML = '<p class="vazio">Nenhuma tarefa encontrada. Cadastre a primeira acima.</p>';
+    return;
+  }
+  area.innerHTML = lista.map((t) => `
+    <article class="tarefa ${t.status === "concluída" ? "feita" : ""}" data-status="${esc(t.status)}" data-id="${t.id}">
+      <div class="topo">
+        <h3>${esc(t.titulo)}</h3>
+        <span class="data ${atrasada(t) ? "atrasada" : ""}">${atrasada(t) ? "Atrasada: " : "Vence em "}${esc(t.vencimento)}</span>
+      </div>
+      ${t.descricao ? `<p class="desc">${esc(t.descricao)}</p>` : ""}
+      <div class="acoes">
+        <select data-acao="status" aria-label="Status da tarefa ${esc(t.titulo)}">
+          ${STATUS.map((s) => `<option value="${s}" ${s === t.status ? "selected" : ""}>${s}</option>`).join("")}
+        </select>
+        <span class="espaco"></span>
+        <button data-acao="editar">Editar</button>
+        <button data-acao="excluir" class="perigo">Excluir</button>
+      </div>
+    </article>`).join("");
+}
+
+async function carregar() {
+  const p = new URLSearchParams();
+  if ($("#f-status").value) p.set("status", $("#f-status").value);
+  if ($("#f-data").value) p.set("vencimento", paraBR($("#f-data").value));
+  tarefasAtuais = await api("/api/tarefas?" + p);
+  desenhar(tarefasAtuais);
+}
+
+$("#form-nova").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#msg-nova").textContent = "";
+  try {
+    await api("/api/tarefas", {
+      method: "POST",
+      body: JSON.stringify({
+        titulo: $("#n-titulo").value,
+        descricao: $("#n-desc").value,
+        vencimento: paraBR($("#n-data").value),
+        status: $("#n-status").value,
+      }),
+    });
+    e.target.reset();
+    await carregar();
+  } catch (erro) {
+    $("#msg-nova").textContent = erro.message;
+  }
+});
+
+["#f-status", "#f-data"].forEach((s) => $(s).addEventListener("change", carregar));
+$("#limpar").addEventListener("click", () => {
+  $("#f-status").value = "";
+  $("#f-data").value = "";
+  carregar();
+});
+
+$("#lista").addEventListener("click", async (e) => {
+  const acao = e.target.dataset.acao;
+  const card = e.target.closest(".tarefa");
+  if (!card || !acao) return;
+  const id = Number(card.dataset.id);
+  const t = tarefasAtuais.find((x) => x.id === id);
+
+  if (acao === "excluir" && confirm(`Excluir a tarefa "${t.titulo}"?`)) {
+    await api("/api/tarefas/" + id, { method: "DELETE" });
+    await carregar();
+  }
+  if (acao === "editar") {
+    $("#e-id").value = id;
+    $("#e-titulo").value = t.titulo;
+    $("#e-desc").value = t.descricao;
+    $("#e-data").value = paraISO(t.vencimento);
+    $("#msg-editar").textContent = "";
+    $("#dlg").showModal();
+  }
+});
+
+$("#lista").addEventListener("change", async (e) => {
+  if (e.target.dataset.acao !== "status") return;
+  const id = Number(e.target.closest(".tarefa").dataset.id);
+  await api("/api/tarefas/" + id, { method: "PUT", body: JSON.stringify({ status: e.target.value }) });
+  await carregar();
+});
+
+$("#form-editar").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/tarefas/" + $("#e-id").value, {
+      method: "PUT",
+      body: JSON.stringify({
+        titulo: $("#e-titulo").value,
+        descricao: $("#e-desc").value,
+        vencimento: paraBR($("#e-data").value),
+      }),
+    });
+    $("#dlg").close();
+    await carregar();
+  } catch (erro) {
+    $("#msg-editar").textContent = erro.message;
+  }
+});
+
+$("#cancelar").addEventListener("click", () => $("#dlg").close());
+carregar();
+</script>
+</body>
+</html>
